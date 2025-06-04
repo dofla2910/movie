@@ -2,6 +2,7 @@ import { useState, useEffect, lazy } from 'react'
 import SearchBar from './components/SearchBar'
 import Spinner from './components/Spinner'
 import { useDebounce } from 'react-use'
+import { getTrendingMovies, updateSearchCount } from './appwrite'
 
 const MovieCard = lazy(() => import('./components/MovieCard'))
 
@@ -17,10 +18,15 @@ const API_OPTIONS = {
 
 const App = () => {
   const [searchTerm, setSearchTerm] = useState('')
-  const [errorMsg, setErrorMsg] = useState('')
-  const [movies, setMovies] = useState([])
-  const [loading, setLoading] = useState(false)
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
+
+  const [movies, setMovies] = useState([])
+  const [errorMsg, setErrorMsg] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const [trendingMovies, setTrendingMovies] = useState([])
+  const [trendingError, setTrendingError] = useState('')
+  const [trendingLoading, setTrendingLoading] = useState(false)
 
   useDebounce(() => setDebouncedSearchTerm(searchTerm), 1000, [searchTerm])
 
@@ -38,6 +44,11 @@ const App = () => {
       }
       const data = await response.json()
       setMovies(data.results || [])
+
+      if (query && data.results.length > 0) {
+        // Optionally, you can update the search count in your database here
+        await updateSearchCount(query, data.results[0])
+      }
     } catch (error) {
       console.error('Error fetching movies:', error)
       setErrorMsg('Failed to fetch movies. Please try again later.')
@@ -50,6 +61,25 @@ const App = () => {
     fetchMovies(debouncedSearchTerm)
   }, [debouncedSearchTerm])
 
+  const loadTrendingMovies = async () => {
+    setTrendingLoading(true)
+    setTrendingError('')
+
+    try {
+      const movies = await getTrendingMovies()
+      setTrendingMovies(movies)
+    } catch (error) {
+      console.error('Error fetching trending movies:', error)
+      setTrendingError('Failed to fetch trending movies. Please try again later.')
+    } finally {
+      setTrendingLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadTrendingMovies()
+  }, [])
+
   return (
     <main>
       <div className='pattern' />
@@ -61,8 +91,29 @@ const App = () => {
           </h1>
           <SearchBar searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
         </header>
+        {trendingMovies.length > 0 && (
+          <section className='trending'>
+            <h2 className='mt-[20px]'>Trending Movies</h2>
+            <ul>
+              {trendingLoading ? (
+                <Spinner />
+              ) : trendingError ? (
+                <p className='text-red-500'>{trendingError}</p>
+              ) : trendingMovies.length > 0 ? (
+                trendingMovies.map((movie, idx) => (
+                  <li key={movie.id}>
+                    <p>{idx + 1}</p>
+                    <img src={movie.poster_url} alt='' />
+                  </li>
+                ))
+              ) : (
+                <p>No trending movies found.</p>
+              )}
+            </ul>
+          </section>
+        )}
         <div className='all-movies'>
-          <h2 className='mt-[50px]'>All Movies</h2>
+          <h2>All Movies</h2>
           <div className='movies-list'>
             {loading ? (
               <Spinner />
